@@ -494,15 +494,25 @@ public class OFSwitchHandshakeHandler implements IOFConnectionListener {
 		 * each table. This is priority=0 with no Match.
 		 */
 		if (this.sw.getOFFactory().getVersion().compareTo(OFVersion.OF_13) >= 0) {
-			/*
-			 * Remove the default flow if it's present.
-			 */
-			OFFlowDeleteStrict deleteFlow = this.factory.buildFlowDeleteStrict()
-					.setTableId(TableId.ALL)
-					.setOutPort(OFPort.CONTROLLER)
-					.build();
-			this.sw.write(deleteFlow);
-
+			boolean is_openvswitch = false;
+			SwitchDescription desc = sw.getSwitchDescription();
+			if (desc != null)
+				is_openvswitch= desc.getHardwareDescription().equals("Open vSwitch");
+				
+			if (is_openvswitch == true) {
+				log.info("chiwook, remaning flow tables of {} on upcoming transition to MASTER becuase this is a open vswitch.", sw.getId().toString());
+			}
+			if (is_openvswitch == false) {
+				log.info("chiwook, clear flow tables of {} on upcoming transition to MASTER", sw.getId().toString());
+				/*
+				 * Remove the default flow if it's present.
+				 */
+				OFFlowDeleteStrict deleteFlow = this.factory.buildFlowDeleteStrict()
+						.setTableId(TableId.ALL)
+						.setOutPort(OFPort.CONTROLLER)
+						.build();
+				this.sw.write(deleteFlow);
+			}
 			ArrayList<OFAction> actions = new ArrayList<OFAction>(1);
 			actions.add(factory.actions().output(OFPort.CONTROLLER, 0xffFFffFF));
 			ArrayList<OFMessage> flows = new ArrayList<OFMessage>();
@@ -1342,15 +1352,25 @@ public class OFSwitchHandshakeHandler implements IOFConnectionListener {
 
 		@Override
 		void enterState() {
-			if (OFSwitchManager.clearTablesOnEachTransitionToMaster) {
-				log.info("Clearing flow tables of {} on upcoming transition to MASTER.", sw.getId().toString());
-				//clearAllTables();
-			} else if (OFSwitchManager.clearTablesOnInitialConnectAsMaster && initialRole == null) { /* don't do it if we were slave first */
-				initialRole = OFControllerRole.ROLE_MASTER;
-				log.info("Clearing flow tables of {} on upcoming initial role as MASTER.", sw.getId().toString());
-				//clearAllTables();
+			boolean is_openvswitch = false;
+			SwitchDescription desc = sw.getSwitchDescription();
+			if (desc != null)
+				is_openvswitch= desc.getHardwareDescription().equals("Open vSwitch");
+				
+			if (is_openvswitch == true) {
+				log.info("chiwook, remaning flow tables of {} on upcoming transition to MASTER becuase this is a open vswitch.", sw.getId().toString());
+				
 			}
-
+			else {
+				if (OFSwitchManager.clearTablesOnEachTransitionToMaster) {
+					log.info("Clearing flow tables of {} on upcoming transition to MASTER.", sw.getId().toString());
+					clearAllTables();
+				} else if (OFSwitchManager.clearTablesOnInitialConnectAsMaster && initialRole == null) { /* don't do it if we were slave first */
+					initialRole = OFControllerRole.ROLE_MASTER;
+					log.info("Clearing flow tables of {} on upcoming initial role as MASTER.", sw.getId().toString());
+					clearAllTables();
+				}
+			}
 			sendBarrier(); /* Need to make sure the tables are clear before adding default flows */
 			addDefaultFlows();
 
